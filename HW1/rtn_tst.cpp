@@ -91,7 +91,7 @@ void sort_out(){
     }
     sort(procs.begin(), procs.end(), sort_aux);
     for (std::vector<Proc *>::iterator it = procs.begin() ; it != procs.end(); ++it){
-        outFile << (*it)->full_line << "\n";
+        outFile << (*it)->full_line;
     }
 }
 
