@@ -63,14 +63,14 @@ VOID docount(UINT64 * counter)
     (*counter)++;
 }
     
-const char * StripPath(const char * path)
-{
-    const char * file = strrchr(path,'/');
-    if (file)
-        return file+1;
-    else
-        return path;
-}
+// const char * StripPath(const char * path)
+// {
+//     const char * file = strrchr(path,'/');
+//     if (file)
+//         return file+1;
+//     else
+//         return path;
+// }
 
 // Pin calls this function every time a new rtn is executed
 VOID Routine(RTN rtn, VOID *v)
@@ -82,7 +82,7 @@ VOID Routine(RTN rtn, VOID *v)
     // The RTN goes away when the image is unloaded, so save it now
     // because we need it in the fini
     rc->_name = RTN_Name(rtn);
-    rc->_image = StripPath(IMG_Name(SEC_Img(RTN_Sec(rtn))).c_str());
+    rc->_image = IMG_Name(SEC_Img(RTN_Sec(rtn))).c_str();
     rc->_image_address = IMG_Gp(SEC_Img(RTN_Sec(rtn)));
     rc->_address = RTN_Address(rtn);
     rc->_icount = 0;
