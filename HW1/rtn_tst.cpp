@@ -34,12 +34,16 @@ END_LEGAL */
 //
 
 #include <fstream>
+#include <sstream>
 #include <iomanip>
 #include <iostream>
+#include <algorithm>
+#include <vector>
 #include <string.h>
 #include "pin.H"
 
 ofstream outFile;
+vector<string> procs_data;
 
 // Holds instruction count for a single procedure
 typedef struct RtnCount
@@ -54,8 +58,42 @@ typedef struct RtnCount
     struct RtnCount * _next;
 } RTN_COUNT;
 
+typedef struct Proc{
+    int n;
+    char *full_line;
+} proc;
+
 // Linked list of instruction counts for each routine
 RTN_COUNT * RtnList = 0;
+
+/* ===================================================================== */
+/* Sort aux function                                               */
+/* ===================================================================== */
+
+bool sort_aux(Proc *p1, Proc *p2){
+    return ((p1->n) > (p2->n));
+}
+
+/* ===================================================================== */
+/* Sorting out csv file                                                  */
+/* ===================================================================== */
+
+void sort_out(){
+    vector<Proc*> procs;
+    for (std::vector<string>::iterator it = procs_data.begin() ; it != procs_data.end(); ++it){
+        const char *s = strrchr((*it).c_str(), ',');
+        char *num = strdup(s);
+        int number = atoi(num+1);
+        Proc *new_proc = (Proc*)malloc(sizeof(Proc));
+        new_proc->n = number;
+        new_proc->full_line = strdup((*it).c_str());
+        procs.push_back(new_proc);
+    }
+    sort(procs.begin(), procs.end(), sort_aux);
+    for (std::vector<Proc *>::iterator it = procs.begin() ; it != procs.end(); ++it){
+        outFile << (*it)->full_line << "\n";
+    }
+}
 
 // This function is called before every instruction is executed
 VOID docount(UINT64 * counter)
@@ -63,15 +101,6 @@ VOID docount(UINT64 * counter)
     (*counter)++;
 }
     
-// const char * StripPath(const char * path)
-// {
-//     const char * file = strrchr(path,'/');
-//     if (file)
-//         return file+1;
-//     else
-//         return path;
-// }
-
 // Pin calls this function every time a new rtn is executed
 VOID Routine(RTN rtn, VOID *v)
 {
@@ -112,22 +141,20 @@ VOID Routine(RTN rtn, VOID *v)
 // It prints the name and count for each procedure
 VOID Fini(INT32 code, VOID *v)
 {
-    // outFile << setw(23) << "Procedure" << ","
-    //       << setw(15) << "Image" << ","
-    //       << setw(18) << "Address" << ","
-    //       << setw(12) << "Calls" << ","
-    //       << setw(12) << "Instructions" << endl;
-    
     for (RTN_COUNT * rc = RtnList; rc; rc = rc->_next)
     {
-        if (rc->_icount > 0)
-            outFile << showbase << hex << rc->_image_address << ","
-                  << rc->_image << ","
-                  << showbase << hex << rc->_address << dec <<","
-                  << rc->_name << ","
-                  << rc->_icount << endl;
+        if (rc->_icount > 0){
+            ostringstream stream;
+            stream << showbase << hex << rc->_image_address << ","
+                << rc->_image << ","
+                << showbase << hex << rc->_address << dec <<","
+                << rc->_name << ","
+                << rc->_icount << endl;
+            string str =  stream.str();
+            procs_data.push_back(str);
+        }
     }
-
+    sort_out();
 }
 
 /* ===================================================================== */
