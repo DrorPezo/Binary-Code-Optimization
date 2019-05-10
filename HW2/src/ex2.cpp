@@ -1,24 +1,27 @@
 #include <stdio.h>
 #include <fstream>
+#include <vector>
 #include <map>
 #include <iostream>
 #include <string>
 #include "pin.H"
 
-std::map<ADDRINT, std::map<ADDRINT, unsigned long> > cflows;
-std::map<ADDRINT, std::map<ADDRINT, unsigned long> > loops;
-unsigned long cflow_count   = 0;
+std::map<ADDRINT, std::map<ADDRINT, unsigned long>> loops; //count taken edges 
 ofstream outFile;
+bool is_loop = FALSE;
+int cnt = 0;
 
 /*****************************************************************************
  *                             Analysis functions                            *
  *****************************************************************************/
-
-static void count_cflow(ADDRINT ip, ADDRINT target)
+static void count_loops(ADDRINT ip, ADDRINT target)
 {
-  cflows[target][ip]++;
-  cflow_count++;
+  if(ip > target){
+    loops[target][ip]++;
+    is_loop = TRUE;
+  }
 }
+
 
 /*****************************************************************************
  *                         Instrumentation functions                         *
@@ -33,33 +36,14 @@ static void ins_bbl(BBL bbl)
       if(!IMG_Valid(img) || !IMG_IsMainExecutable(img)) return;
 
       INS_InsertPredicatedCall(
-        ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)count_cflow, 
+        ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)count_loops, 
         IARG_INST_PTR, IARG_BRANCH_TARGET_ADDR,
         IARG_END
       );
-      //use while loop or recursive function here with HasFallThrough until we detect all nested loops
-      // if(INS_HasFallThrough(ins)) {
-      //   INS_InsertPredicatedCall(
-      //     ins, IPOINT_AFTER, (AFUNPTR)count_cflow, 
-      //     IARG_INST_PTR, IARG_FALLTHROUGH_ADDR, 
-      //     IARG_END
-      //   );
-      // }
-      // RTN routine = INS_Rtn(ins);
-      // cout << RTN_Name(routine) << endl;
-    }
-    std::map<ADDRINT, std::map<ADDRINT, unsigned long> >::iterator i;
-    std::map<ADDRINT, unsigned long>::iterator j;
-    ADDRINT ip, target;
-    for(i = cflows.begin(); i != cflows.end(); i++) {
-      target = i->first;
-      for(j = i->second.begin(); j != i->second.end(); j++) {
-        ip = j->first;
-        int count = j->second;
-        if(ip > target){
-          loops[target][ip] = count;
-        }
-      } 
+      if(is_loop){
+          
+      }
+      is_loop = FALSE;
     }
   }
 }
@@ -82,7 +66,6 @@ static void print_results(INT32 code, void *v)
   unsigned long count;
   std::map<ADDRINT, std::map<ADDRINT, unsigned long> >::iterator i;
   std::map<ADDRINT, unsigned long>::iterator j;
-
   printf("******* LOOPS *******\n");
   for(i = loops.begin(); i != loops.end(); i++) {
     target = i->first;
@@ -103,7 +86,7 @@ static void print_usage()
 int main(int argc, char *argv[])
 {
   PIN_InitSymbols();
-  outFile.open("loops-cnt.csv");
+  outFile.open("loop-count.csv");
   if(PIN_Init(argc,argv)) {
     print_usage();
     return 1;
