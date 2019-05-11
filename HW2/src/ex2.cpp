@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <fstream>
-#include <vector>
 #include <map>
 #include <iostream>
 #include <string>
@@ -9,7 +8,6 @@
 std::map<ADDRINT, std::map<ADDRINT, unsigned long>> countSeen; 
 std::map<ADDRINT,unsigned long> loopInvoked; 
 ofstream outFile;
-int cnt = 0;
 
 typedef struct RtnCount
 {
@@ -25,7 +23,8 @@ typedef struct RtnCount
 typedef struct LoopProp
 {
   UINT64 _itcount;
-  UINT _invkcount;
+  UINT64 _invkcount;
+  double _meanTaken;
   ADDRINT _head;
   ADDRINT _tail;
   struct RtnCount *_routine;
@@ -141,11 +140,14 @@ static void print_results(INT32 code, void *v)
   int loop_ctr = 1;
   cout << "******* LOOPS *******" << endl;
   for (LOOP_PROP * lp = LoopList; lp; lp = lp->_next){
+    double mean_taken = (lp->_invkcount == 0) ? (double)lp->_itcount : (double)lp->_itcount/(double)lp->_invkcount;
+    cout.precision(4);
     cout << "******* LOOP " << loop_ctr << "*******" << endl;
     cout << "Head address: " << showbase << hex << lp->_head << endl;
     cout << "Tail address: " << showbase << hex << lp->_tail << endl;
     cout << "Count Seen: " << dec << lp->_itcount << endl;
     cout << "Loop Invoked: " << dec << lp->_invkcount << endl;
+    cout << "Mean Taken: " << mean_taken << endl;
     cout << "Routine: " << lp->_routine->_name << endl;
     cout << "Number of calls: " << lp->_routine->_rtnCount << endl;
     cout << "Number of instruction in the routine: "<< lp->_routine->_icount << endl;
