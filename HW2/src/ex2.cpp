@@ -6,28 +6,29 @@
 #include <string>
 #include "pin.H"
 
-std::map<ADDRINT, std::map<ADDRINT, unsigned long>> loops; //count taken edges 
+std::map<ADDRINT, std::map<ADDRINT, unsigned long>> countSeen; 
+std::map<ADDRINT,unsigned long> loopInvoked; 
 ofstream outFile;
-bool is_loop = FALSE;
 int cnt = 0;
 
 typedef struct RtnCount
 {
-    string _name;
-    ADDRINT _address;
-    ADDRINT _tail;
-    RTN _rtn;
-    UINT64 _rtnCount;
-    UINT64 _icount;
-    struct RtnCount * _next;
+  string _name;
+  ADDRINT _address;
+  ADDRINT _tail;
+  RTN _rtn;
+  UINT64 _rtnCount;
+  UINT64 _icount;
+  struct RtnCount * _next;
 } RTN_COUNT;
 
 typedef struct LoopProp
 {
   UINT64 _itcount;
+  UINT _invkcount;
   ADDRINT _head;
   ADDRINT _tail;
-  string _loop_rtn;
+  struct RtnCount *_routine;
   struct LoopProp *_next;
 } LOOP_PROP;
 
@@ -36,11 +37,16 @@ LOOP_PROP * LoopList = 0;
 /*****************************************************************************
  *                             Analysis functions                            *
  *****************************************************************************/
-static void count_loops(ADDRINT ip, ADDRINT target)
+static void count_loops(ADDRINT ip, ADDRINT target, ADDRINT fall_through, BOOL branch_taken)
 {
-  if(ip > target){
-    loops[target][ip]++;
-    is_loop = TRUE;
+  if(branch_taken){
+    // iterate the loop
+    if(target < fall_through){
+      countSeen[target][fall_through]++;
+    }
+  }
+  else{
+    loopInvoked[target]++;
   }
 }
 
@@ -53,37 +59,6 @@ VOID docount(UINT64 * counter)
 /*****************************************************************************
  *                         Instrumentation functions                         *
  *****************************************************************************/
-static void ins_bbl(BBL bbl)
-{
-  // if bbl has a fall throught path - it has a branch, and may be a loop
-  if(BBL_HasFallThrough(bbl)){
-    for(INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins)) {
-      if(!INS_IsBranch(ins)) continue; //IMPORTANT!!! may throw an error without checking if the instruction is call or branch
-      IMG img = IMG_FindByAddress(INS_Address(ins));
-      if(!IMG_Valid(img) || !IMG_IsMainExecutable(img)) return;
-
-      INS_InsertPredicatedCall(
-        ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)count_loops, 
-        IARG_INST_PTR, IARG_BRANCH_TARGET_ADDR,
-        IARG_END
-      );
-      if(is_loop){
-
-      }
-      is_loop = FALSE;
-    }
-  }
-}
-
-static void instrument_trace(TRACE trace, void *v)
-{
-  IMG img = IMG_FindByAddress(TRACE_Address(trace));
-  if(!IMG_Valid(img) || !IMG_IsMainExecutable(img)) return;
-  for(BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl)){
-    ins_bbl(bbl);
-  }
-}
-
 VOID Routine(RTN rtn, VOID *v)
 {
     
@@ -96,6 +71,7 @@ VOID Routine(RTN rtn, VOID *v)
     rc->_address = RTN_Address(rtn);
     rc->_icount = 0;
     rc->_rtnCount = 0;
+    rc->_rtn = rtn;
 
     // Add to list of routines
     rc->_next = RtnList;
@@ -109,11 +85,17 @@ VOID Routine(RTN rtn, VOID *v)
     // For each instruction of the routine
     for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins))
     {
-        // Insert a call to docount to increment the instruction counter for this rtn
-        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)docount, IARG_PTR, &(rc->_icount), IARG_END);
-    }
+      if(!INS_IsDirectBranch(ins) || !INS_HasFallThrough(ins)) continue; 
+      IMG img = IMG_FindByAddress(INS_Address(ins));
+      if(!IMG_Valid(img)) return;
 
-    
+      INS_InsertCall(
+        ins, IPOINT_BEFORE, (AFUNPTR)count_loops, 
+        IARG_INST_PTR, IARG_BRANCH_TARGET_ADDR, IARG_FALLTHROUGH_ADDR, IARG_BRANCH_TAKEN, 
+        IARG_END
+      );
+    }
+    rc->_icount = RTN_NumIns(rtn);
     RTN_Close(rtn);
 }
 
@@ -122,21 +104,23 @@ VOID Routine(RTN rtn, VOID *v)
  *****************************************************************************/
 static void print_results(INT32 code, void *v)
 {
-  ADDRINT ip, target;
+  ADDRINT ft, target;
   unsigned long count;
   std::map<ADDRINT, std::map<ADDRINT, unsigned long> >::iterator i;
   std::map<ADDRINT, unsigned long>::iterator j;
-  for(i = loops.begin(); i != loops.end(); i++) {
+  for(i = countSeen.begin(); i != countSeen.end(); i++) {
     LOOP_PROP * lc = new LOOP_PROP;
     target = i->first;
     for(j = i->second.begin(); j != i->second.end(); j++) {
-      ip = j->first;
+      ft = j->first;
       count = j->second;
-      //printf("0x%08jx <- 0x%08jx: %3lu\n", target, ip, count);
       lc->_head = target;
-      lc->_tail = ip;
+      lc->_tail = ft;
       lc->_itcount = count;
     } 
+
+    lc->_invkcount = loopInvoked[target];
+ 
     lc->_next = LoopList;
     LoopList = lc;
   }
@@ -145,23 +129,27 @@ static void print_results(INT32 code, void *v)
       string rtn_name = rc->_name;
       ADDRINT head_address = rc->_address;
       ADDRINT tail_address = rc->_tail;
-      //UINT64 rtn_count = rc->_rtnCount;
-      //UINT64 ins_count = rc->_icount;
       for (LOOP_PROP * lp = LoopList; lp; lp = lp->_next){
         ADDRINT loop_head = lp->_head;
         ADDRINT loop_tail = lp->_tail;
         if(head_address < loop_head && loop_tail < tail_address){
-          lp->_loop_rtn = rc->_name;
+          lp->_routine = rc;
         }
       }
     }
   }
-  printf("******* LOOPS *******\n");
+  int loop_ctr = 1;
+  cout << "******* LOOPS *******" << endl;
   for (LOOP_PROP * lp = LoopList; lp; lp = lp->_next){
-    cout << "Head address: " << showbase << hex << lp->_head <<
-    " Tail address: " << showbase << hex << lp->_tail <<
-    " Iteration count: " << dec << lp->_itcount << 
-    " Routine: " << lp->_loop_rtn << endl;
+    cout << "******* LOOP " << loop_ctr << "*******" << endl;
+    cout << "Head address: " << showbase << hex << lp->_head << endl;
+    cout << "Tail address: " << showbase << hex << lp->_tail << endl;
+    cout << "Count Seen: " << dec << lp->_itcount << endl;
+    cout << "Loop Invoked: " << dec << lp->_invkcount << endl;
+    cout << "Routine: " << lp->_routine->_name << endl;
+    cout << "Number of calls: " << lp->_routine->_rtnCount << endl;
+    cout << "Number of instruction in the routine: "<< lp->_routine->_icount << endl;
+    loop_ctr++;
   }
 }
 
@@ -180,7 +168,6 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  TRACE_AddInstrumentFunction(instrument_trace, NULL);
   RTN_AddInstrumentFunction(Routine, 0);
   PIN_AddFiniFunction(print_results, NULL);
 
