@@ -1,13 +1,20 @@
 #include <stdio.h>
 #include <fstream>
+#include <sstream>
+#include <iomanip>
+#include <algorithm>
 #include <map>
+#include <vector>
 #include <iostream>
 #include <string>
 #include "pin.H"
 
+int fall_through_ctr = 0;
 std::map<ADDRINT, std::map<ADDRINT, unsigned long>> countSeen; 
 std::map<ADDRINT,unsigned long> loopInvoked; 
+std::map<ADDRINT,unsigned long> diffs; 
 ofstream outFile;
+vector<string> procs_data;
 
 typedef struct RtnCount
 {
@@ -24,6 +31,7 @@ typedef struct LoopProp
 {
   UINT64 _itcount;
   UINT64 _invkcount;
+  UINT64 _diffs;
   double _meanTaken;
   ADDRINT _head;
   ADDRINT _tail;
@@ -31,8 +39,43 @@ typedef struct LoopProp
   struct LoopProp *_next;
 } LOOP_PROP;
 
+typedef struct Proc{
+    int n;
+    char *full_line;
+} proc;
+
 RTN_COUNT * RtnList = 0;
 LOOP_PROP * LoopList = 0;
+
+/* ===================================================================== */
+/* Sort aux function                                               */
+/* ===================================================================== */
+
+bool sort_aux(Proc *p1, Proc *p2){
+    return ((p1->n) > (p2->n));
+}
+
+/* ===================================================================== */
+/* Sorting out csv file                                                  */
+/* ===================================================================== */
+
+void sort_out(){
+    vector<Proc*> procs;
+    for (std::vector<string>::iterator it = procs_data.begin() ; it != procs_data.end(); ++it){
+        const char *s = strrchr((*it).c_str(), ',');
+        char *num = strdup(s);
+        int number = atoi(num+1);
+        Proc *new_proc = (Proc*)malloc(sizeof(Proc));
+        new_proc->n = number;
+        new_proc->full_line = strdup((*it).c_str());
+        procs.push_back(new_proc);
+    }
+    sort(procs.begin(), procs.end(), sort_aux);
+    for (std::vector<Proc *>::iterator it = procs.begin() ; it != procs.end(); ++it){
+        outFile << (*it)->full_line;
+    }
+}
+
 /*****************************************************************************
  *                             Analysis functions                            *
  *****************************************************************************/
@@ -43,9 +86,14 @@ static void count_loops(ADDRINT ip, ADDRINT target, ADDRINT fall_through, BOOL b
     if(target < fall_through){
       countSeen[target][fall_through]++;
     }
+    fall_through_ctr = 0;
   }
   else{
     loopInvoked[target]++;
+    fall_through_ctr++;
+    if(fall_through_ctr > 1){
+      diffs[target]++;
+    }
   }
 }
 
@@ -119,6 +167,7 @@ static void print_results(INT32 code, void *v)
     } 
 
     lc->_invkcount = loopInvoked[target];
+    lc->_diffs = diffs[target];
  
     lc->_next = LoopList;
     LoopList = lc;
@@ -137,22 +186,23 @@ static void print_results(INT32 code, void *v)
       }
     }
   }
-  int loop_ctr = 1;
-  cout << "******* LOOPS *******" << endl;
+
+  ostringstream stream;
   for (LOOP_PROP * lp = LoopList; lp; lp = lp->_next){
     double mean_taken = (lp->_invkcount == 0) ? (double)lp->_itcount : (double)lp->_itcount/(double)lp->_invkcount;
-    cout.precision(4);
-    cout << "******* LOOP " << loop_ctr << "*******" << endl;
-    cout << "Head address: " << showbase << hex << lp->_head << endl;
-    cout << "Tail address: " << showbase << hex << lp->_tail << endl;
-    cout << "Count Seen: " << dec << lp->_itcount << endl;
-    cout << "Loop Invoked: " << dec << lp->_invkcount << endl;
-    cout << "Mean Taken: " << mean_taken << endl;
-    cout << "Routine: " << lp->_routine->_name << endl;
-    cout << "Number of calls: " << lp->_routine->_rtnCount << endl;
-    cout << "Number of instruction in the routine: "<< lp->_routine->_icount << endl;
-    loop_ctr++;
+    stream << showbase << hex << lp->_head << ","
+    << showbase << hex << lp->_tail << ","
+    << dec << lp->_itcount << ","
+    << dec << lp->_invkcount << ","
+    << mean_taken << ","
+    << lp->_diffs << ","
+    << lp->_routine->_name << ","
+    << lp->_routine->_rtnCount << ","
+    << lp->_routine->_icount << endl;
+    string str =  stream.str();
+    procs_data.push_back(str);
   }
+  sort_out();
 }
 
 static void print_usage()
