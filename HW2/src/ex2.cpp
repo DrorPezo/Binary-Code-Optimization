@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include <fstream>
 #include <sstream>
+#include <numeric> 
+#include <functional>
 #include <iomanip>
+#include <iterator>
 #include <algorithm>
 #include <map>
 #include <vector>
@@ -9,13 +12,14 @@
 #include <string>
 #include "pin.H"
 
-int fall_through_ctr = 0;
 std::map<ADDRINT, std::map<ADDRINT, unsigned long>> countSeen; 
 std::map<ADDRINT,unsigned long> loopInvoked; 
-std::map<ADDRINT,unsigned long> diffs; 
+std::map<ADDRINT,vector<unsigned long>> iters_per_inv;
 ofstream outFile;
-vector<string> procs_data;
+vector<string> loops_data;
+unsigned long iter_cnt = 0;
 
+// data structure to handle routine properties 
 typedef struct RtnCount
 {
   string _name;
@@ -27,52 +31,55 @@ typedef struct RtnCount
   struct RtnCount * _next;
 } RTN_COUNT;
 
+// data structure to handle loop properties 
 typedef struct LoopProp
 {
-  UINT64 _itcount;
-  UINT64 _invkcount;
-  UINT64 _diffs;
-  double _meanTaken;
+  UINT64 _itcount; //total iteration count (countSeen)
+  UINT64 _invkcount; 
+  UINT64 diffs; 
+  vector<unsigned long> _iters_cnt; //iters per invokation
+  double _meanTaken; 
   ADDRINT _head;
   ADDRINT _tail;
   struct RtnCount *_routine;
   struct LoopProp *_next;
 } LOOP_PROP;
 
-typedef struct Proc{
-    int n;
-    char *full_line;
-} proc;
+// aux data structure for the csv sorting
+typedef struct Loopc{
+  int n;
+  char *full_line;
+} Loopc;
 
+// routines list
 RTN_COUNT * RtnList = 0;
+// loops list
 LOOP_PROP * LoopList = 0;
 
 /* ===================================================================== */
 /* Sort aux function                                               */
 /* ===================================================================== */
-
-bool sort_aux(Proc *p1, Proc *p2){
+bool sort_aux(Loopc *p1, Loopc *p2){
     return ((p1->n) > (p2->n));
 }
 
 /* ===================================================================== */
 /* Sorting out csv file                                                  */
 /* ===================================================================== */
-
 void sort_out(){
-    vector<Proc*> procs;
-    for (std::vector<string>::iterator it = procs_data.begin() ; it != procs_data.end(); ++it){
-        const char *s = strrchr((*it).c_str(), ',');
-        char *num = strdup(s);
-        int number = atoi(num+1);
-        Proc *new_proc = (Proc*)malloc(sizeof(Proc));
-        new_proc->n = number;
-        new_proc->full_line = strdup((*it).c_str());
-        procs.push_back(new_proc);
+    vector<Loopc*> loopcs;
+    for (std::vector<string>::iterator it = loops_data.begin() ; it != loops_data.end(); ++it){
+      const char *s = strchr((*it).c_str(), ','); // for sorting from the back - use strrchr instead of strchr
+      char *num = strdup(s);
+      int number = atoi(num+1);
+      Loopc *new_loopc = (Loopc*)malloc(sizeof(Loopc));
+      new_loopc->n = number;
+      new_loopc->full_line = strdup((*it).c_str());
+      loopcs.push_back(new_loopc);
     }
-    sort(procs.begin(), procs.end(), sort_aux);
-    for (std::vector<Proc *>::iterator it = procs.begin() ; it != procs.end(); ++it){
-        outFile << (*it)->full_line;
+    sort(loopcs.begin(), loopcs.end(), sort_aux);
+    for (std::vector<Loopc *>::iterator it = loopcs.begin() ; it != loopcs.end(); ++it){
+      outFile << (*it)->full_line;
     }
 }
 
@@ -82,53 +89,51 @@ void sort_out(){
 static void count_loops(ADDRINT ip, ADDRINT target, ADDRINT fall_through, BOOL branch_taken)
 {
   if(branch_taken){
-    // iterate the loop
+  // iterate the loop
     if(target < fall_through){
       countSeen[target][fall_through]++;
+      iter_cnt++;
     }
-    fall_through_ctr = 0;
   }
   else{
     loopInvoked[target]++;
-    fall_through_ctr++;
-    if(fall_through_ctr > 1){
-      diffs[target]++;
-    }
+    iters_per_inv[target].push_back(iter_cnt);
+    iter_cnt = 0;
   }
 }
 
 VOID docount(UINT64 * counter)
 {
-    (*counter)++;
+  (*counter)++;
 }
 
-
 /*****************************************************************************
- *                         Instrumentation functions                         *
+ *                            Aux function for instrumentation               *
  *****************************************************************************/
-VOID Routine(RTN rtn, VOID *v)
+RTN_COUNT * new_rtn(RTN rtn)
 {
-    
-    // Allocate a counter for this routine
     RTN_COUNT * rc = new RTN_COUNT;
-
-    // The RTN goes away when the image is unloaded, so save it now
-    // because we need it in the fini
     rc->_name = RTN_Name(rtn);
     rc->_address = RTN_Address(rtn);
-    rc->_icount = 0;
+    rc->_icount = RTN_NumIns(rtn);
     rc->_rtnCount = 0;
     rc->_rtn = rtn;
-
-    // Add to list of routines
     rc->_next = RtnList;
     RtnList = rc;
-            
+    rc->_tail = INS_Address(RTN_InsTail(rtn));
+    return rc;
+}
+
+/*****************************************************************************
+ *                         Instrumentation function                        *
+ *****************************************************************************/
+VOID Routine(RTN rtn, VOID *v)
+{            
     RTN_Open(rtn);
-            
+    RTN_COUNT *rc = new_rtn(rtn);
     // Insert a call at the entry point of a routine to increment the call count
     RTN_InsertCall(rtn, IPOINT_BEFORE, (AFUNPTR)docount, IARG_PTR, &(rc->_rtnCount), IARG_END);
-    rc->_tail = INS_Address(RTN_InsTail(rtn));
+  
     // For each instruction of the routine
     for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins))
     {
@@ -142,15 +147,28 @@ VOID Routine(RTN rtn, VOID *v)
         IARG_END
       );
     }
-    rc->_icount = RTN_NumIns(rtn);
     RTN_Close(rtn);
 }
 
 /*****************************************************************************
  *                               Other functions                             *
  *****************************************************************************/
-static void print_results(INT32 code, void *v)
-{
+
+//calculate differences between two adjacent loops iterations number
+UINT64 calculate_diff(std::vector<unsigned long> itrs){
+  UINT64 diff_cnt = 0;
+  vector<unsigned long> diffs (itrs.size());
+  std::adjacent_difference(itrs.begin(), itrs.end(), diffs.begin());
+  for (std::vector<unsigned long>::iterator it = diffs.begin() ; it != diffs.end(); ++it){
+    if ((*it) != 0){
+      diff_cnt++;
+    }
+  }
+  return diff_cnt;
+}
+
+// process loops data for printing it out
+void process_loop_data(){
   ADDRINT ft, target;
   unsigned long count;
   std::map<ADDRINT, std::map<ADDRINT, unsigned long> >::iterator i;
@@ -167,7 +185,8 @@ static void print_results(INT32 code, void *v)
     } 
 
     lc->_invkcount = loopInvoked[target];
-    lc->_diffs = diffs[target];
+    lc->_iters_cnt = iters_per_inv[target];
+    lc->diffs = calculate_diff(lc->_iters_cnt);
  
     lc->_next = LoopList;
     LoopList = lc;
@@ -186,31 +205,39 @@ static void print_results(INT32 code, void *v)
       }
     }
   }
+}
 
+// printing results to csv file
+static void print_results(INT32 code, void *v)
+{
+  process_loop_data();
   ostringstream stream;
+  string str;
   for (LOOP_PROP * lp = LoopList; lp; lp = lp->_next){
-    double mean_taken = (lp->_invkcount == 0) ? (double)lp->_itcount : (double)lp->_itcount/(double)lp->_invkcount;
-    stream << showbase << hex << lp->_head << ","
-    << showbase << hex << lp->_tail << ","
+    double mean_taken = (lp->_invkcount == 0) ? lp->_invkcount : (double)lp->_itcount/(double)lp->_invkcount;
+    stream
+    << showbase << hex << lp->_head << ","
     << dec << lp->_itcount << ","
     << dec << lp->_invkcount << ","
     << mean_taken << ","
-    << lp->_diffs << ","
+    << lp->diffs << "," 
     << lp->_routine->_name << ","
-    << lp->_routine->_rtnCount << ","
-    << lp->_routine->_icount << endl;
-    string str =  stream.str();
-    procs_data.push_back(str);
+    << showbase << hex << lp->_routine->_address << ","
+    << dec << (lp->_routine)->_rtnCount << endl;
+    str =  stream.str();
+    loops_data.push_back(str);
+    stream.str("");
   }
   sort_out();
 }
 
+// usage function
 static void print_usage()
 {
   cerr << endl << KNOB_BASE::StringKnobSummary() << endl;
 }
 
-
+// main function
 int main(int argc, char *argv[])
 {
   PIN_InitSymbols();
