@@ -7,7 +7,7 @@
 #include "prof.H"
 #include "inst.H"
 #include "pin.H"
-#define MAX_FINE_NAME_SIZE  30
+
 
 ifstream inputFile;
 char profileFilename[MAX_FINE_NAME_SIZE];
@@ -21,13 +21,7 @@ typedef struct instr_table_struct {
 	ADDRINT offset;
 } instr_table_t;
 
-typedef struct hot_rtn_data{
-    ADDRINT addr;
-    UINT64 cnt;
-    char name[MAX_FINE_NAME_SIZE];
-} hot_rtn_data_t;
 
-vector<hot_rtn_data_t*> hot_rtns;
 /*======================================================================*/
 /* commandline switches                                                 */
 /*======================================================================*/
@@ -184,15 +178,11 @@ int main(int argc, char * argv[])
             }
             //cout << hot_rtns.size() << endl;
         }
-        for (std::vector<hot_rtn_data_t*>::iterator it = hot_rtns.begin() ; it != hot_rtns.end(); ++it){
-            cout << (*it)->name << endl;
-            cout << showbase << dec << (*it)->cnt << " " << showbase << hex << (*it)->addr << " " << endl;  
-        }
-        // Register ImageLoad
-	    // IMG_AddInstrumentFunction(ImageLoad, 0);
-        // Start the program, never returns
-        // PIN_StartProgramProbed();
-        inputFile.close();
+
+        //Register ImageLoad
+	    IMG_AddInstrumentFunction(ImageLoad, 0);
+        //Start the program, never returns
+        PIN_StartProgramProbed();
     }
 
     /* Never returns */
