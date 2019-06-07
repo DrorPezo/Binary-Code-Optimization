@@ -746,7 +746,8 @@ int find_candidate_rtns_for_translation(IMG img)
 
         for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
         {	
-
+			// comapring with the functions from the profile file by address and not by name
+			// due to function override
 			if (rtn == RTN_Invalid()) {
 			  cerr << "Warning: invalid routine " << RTN_Name(rtn) << endl;
   			  continue;
