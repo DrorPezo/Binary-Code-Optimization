@@ -12,10 +12,10 @@
 #include <string>
 #include "pin.H"
 
-ofstream outFile;
-std::map<ADDRINT, std::map<ADDRINT, unsigned long> > countSeen; 
+std::map<ADDRINT, std::map<ADDRINT, unsigned long>> countSeen; 
 std::map<ADDRINT,unsigned long> loopInvoked; 
 std::map<ADDRINT,vector<unsigned long>> iters_per_inv;
+ofstream outFile;
 vector<string> loops_data;
 unsigned long iter_cnt = 0;
 
@@ -235,5 +235,24 @@ static void print_results(INT32 code, void *v)
 static void print_usage()
 {
   cerr << endl << KNOB_BASE::StringKnobSummary() << endl;
+}
+
+// main function
+int main(int argc, char *argv[])
+{
+  PIN_InitSymbols();
+  outFile.open("loop-count.csv");
+  if(PIN_Init(argc,argv)) {
+    print_usage();
+    return 1;
+  }
+
+  RTN_AddInstrumentFunction(Routine, 0);
+  PIN_AddFiniFunction(print_results, NULL);
+
+  /* Never returns */
+  PIN_StartProgram();
+    
+  return 0;
 }
 
