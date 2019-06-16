@@ -129,25 +129,31 @@ RTN_COUNT * new_rtn(RTN rtn)
  *****************************************************************************/
 VOID Routine(RTN rtn, VOID *v)
 {            
-    RTN_Open(rtn);
-    RTN_COUNT *rc = new_rtn(rtn);
-    // Insert a call at the entry point of a routine to increment the call count
-    RTN_InsertCall(rtn, IPOINT_BEFORE, (AFUNPTR)docount, IARG_PTR, &(rc->_rtnCount), IARG_END);
-  
-    // For each instruction of the routine
-    for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins))
-    {
-      if(!INS_IsDirectBranch(ins) || !INS_HasFallThrough(ins)) continue; 
-      IMG img = IMG_FindByAddress(INS_Address(ins));
-      if(!IMG_Valid(img)) return;
 
-      INS_InsertCall(
-        ins, IPOINT_BEFORE, (AFUNPTR)count_loops, 
-        IARG_INST_PTR, IARG_BRANCH_TARGET_ADDR, IARG_FALLTHROUGH_ADDR, IARG_BRANCH_TAKEN, 
-        IARG_END
-      );
-    }
-    RTN_Close(rtn);
+  IMG img = IMG_FindByAddress(RTN_Address(rtn));
+  if(!IMG_Valid(img)) return;
+  if (!IMG_IsMainExecutable(img))
+    return;
+    
+  RTN_Open(rtn);
+  RTN_COUNT *rc = new_rtn(rtn);
+  // Insert a call at the entry point of a routine to increment the call count
+  RTN_InsertCall(rtn, IPOINT_BEFORE, (AFUNPTR)docount, IARG_PTR, &(rc->_rtnCount), IARG_END);
+
+  // For each instruction of the routine
+  for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins))
+  {
+    if(!INS_IsDirectBranch(ins)) continue; //&& !INS_HasFallThrough(ins)) continue; 
+    //IMG img = IMG_FindByAddress(INS_Address(ins));
+    //if(!IMG_Valid(img)) return;
+
+    INS_InsertCall(
+      ins, IPOINT_BEFORE, (AFUNPTR)count_loops, 
+      IARG_INST_PTR, IARG_BRANCH_TARGET_ADDR, IARG_FALLTHROUGH_ADDR, IARG_BRANCH_TAKEN, 
+      IARG_END
+    );
+  }
+  RTN_Close(rtn);
 }
 
 /*****************************************************************************
