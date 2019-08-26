@@ -77,6 +77,8 @@ typedef struct Loopc{
 
 typedef struct hot_loop_data{
     ADDRINT target_addr;
+		ADDRINT end_addr;
+		ADDRINT rtn_addr;
     UINT64 cnt;
     char name[MAX_FINE_NAME_SIZE];
 } hot_loop_data_t;
@@ -229,13 +231,9 @@ RTN_COUNT * new_rtn(RTN rtn)
  *****************************************************************************/
 VOID Routine(RTN rtn, VOID *v)
 {            
-
-
-      IMG img = IMG_FindByAddress(RTN_Address(rtn));
-      if(!IMG_Valid(img)) return;
-      if (!IMG_IsMainExecutable(img))
-		  return;
-
+		IMG img = IMG_FindByAddress(RTN_Address(rtn));
+		if(!IMG_Valid(img)) return;
+		if (!IMG_IsMainExecutable(img))return;
 
     RTN_Open(rtn);
     RTN_COUNT *rc = new_rtn(rtn);
@@ -967,6 +965,26 @@ bool rtn_is_hot(RTN rtn){
 }
 
 /*****************************************/
+/* find_loop_end_addr() */
+/*****************************************/
+void find_loop_end_addr(){
+	for (std::vector<hot_loop_data_t*>::iterator it = hot_loops.begin() ; it != hot_loops.end(); ++it){
+		cout << (*it)->name << endl;
+		RTN rtn = RTN_FindByAddress((*it)->rtn_addr);
+		RTN_Open(rtn);
+		for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)){
+			if(INS_IsDirectBranch(ins)){
+				if (INS_DirectBranchOrCallTargetAddress(ins) == (*it)->target_addr){
+						(*it)->end_addr = INS_Address(ins);
+				}
+			}
+		}
+		RTN_Close(rtn);
+		cout << showbase << hex << (*it)->end_addr << endl;
+	}
+}
+
+/*****************************************/
 /* unroll(RTN rtn, ADDRINT start_addr, ADDRINT end_addr) */
 /*****************************************/
 // Made generic for further project use
@@ -1162,8 +1180,8 @@ void unroll(RTN rtn, ADDRINT start_addr, ADDRINT end_addr){
 int find_candidate_rtns_for_translation(IMG img)
 {
     int rc;
-		ADDRINT starting_addr = 0x409fde;
-		ADDRINT ending_addr = 0x40a076;
+		// ADDRINT starting_addr = 0x409fde;
+		// ADDRINT ending_addr = 0x40a076;
 	// go over routines and check if they are candidates for translation and mark them for translation:
 
 	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
@@ -1189,7 +1207,7 @@ int find_candidate_rtns_for_translation(IMG img)
 				// Open the RTN.
 				RTN_Open(rtn);         
 				if(RTN_Name(rtn) == desired_rtn){
-						unroll(rtn, starting_addr, ending_addr);
+						// unroll(rtn, starting_addr, ending_addr);
 				}
 				else{
 						for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
@@ -1409,6 +1427,7 @@ VOID ImageLoad(IMG img, VOID *v)
 	if (!IMG_IsMainExecutable(img))
 		return;
 
+	find_loop_end_addr();
 	int rc = 0;
 
 	// step 1: Check size of executable sections and allocate required memory:	
@@ -1419,49 +1438,49 @@ VOID ImageLoad(IMG img, VOID *v)
 	cout << "after memory allocation" << endl;
 
 	
-	// Step 2: go over all routines and identify candidate routines and copy their code into the instr map IR:
-	rc = find_candidate_rtns_for_translation(img);
-	if (rc < 0)
-		return;
+	// // Step 2: go over all routines and identify candidate routines and copy their code into the instr map IR:
+	// rc = find_candidate_rtns_for_translation(img);
+	// if (rc < 0)
+	// 	return;
 
-	cout << "after identifying candidate routines" << endl;	 
+	// cout << "after identifying candidate routines" << endl;	 
 	
-	// Step 3: Chaining - calculate direct branch and call instructions to point to corresponding target instr entries:
-	rc = chain_all_direct_br_and_call_target_entries();
-	if (rc < 0 )
-		return;
+	// // Step 3: Chaining - calculate direct branch and call instructions to point to corresponding target instr entries:
+	// rc = chain_all_direct_br_and_call_target_entries();
+	// if (rc < 0 )
+	// 	return;
 	
-	cout << "after calculate direct br targets" << endl;
+	// cout << "after calculate direct br targets" << endl;
 
-	// Step 4: fix rip-based, direct branch and direct call displacements:
-	rc = fix_instructions_displacements();
-	if (rc < 0 )
-		return;
+	// // Step 4: fix rip-based, direct branch and direct call displacements:
+	// rc = fix_instructions_displacements();
+	// if (rc < 0 )
+	// 	return;
 	
-	cout << "after fix instructions displacements" << endl;
+	// cout << "after fix instructions displacements" << endl;
 
 
-	// Step 5: write translated routines to new tc:
-	rc = copy_instrs_to_tc();
-	if (rc < 0 )
-		return;
+	// // Step 5: write translated routines to new tc:
+	// rc = copy_instrs_to_tc();
+	// if (rc < 0 )
+	// 	return;
 
-	cout << "after write all new instructions to memory tc" << endl;
+	// cout << "after write all new instructions to memory tc" << endl;
 
-   if (KnobDumpTranslatedCode) {
-	   cerr << "Translation Cache dump:" << endl;
-       dump_tc();  // dump the entire tc
+  //  if (KnobDumpTranslatedCode) {
+	//    cerr << "Translation Cache dump:" << endl;
+  //      dump_tc();  // dump the entire tc
 
-	   cerr << endl << "instructions map dump:" << endl;
-	   dump_entire_instr_map();     // dump all translated instructions in map_instr
-   }
+	//    cerr << endl << "instructions map dump:" << endl;
+	//    dump_entire_instr_map();     // dump all translated instructions in map_instr
+  //  }
 
-	// Step 6: Commit the translated routines:
-	//Go over the candidate functions and replace the original ones by their new successfully translated ones:
-	if (!KnobDoNotCommitTranslatedCode) {
-		commit_translated_routines();	
-		cout << "after commit translated routines" << endl;
-	}
+	// // Step 6: Commit the translated routines:
+	// //Go over the candidate functions and replace the original ones by their new successfully translated ones:
+	// if (!KnobDoNotCommitTranslatedCode) {
+	// 	commit_translated_routines();	
+	// 	cout << "after commit translated routines" << endl;
+	// }
 }
 
 //Saving profile
@@ -1600,6 +1619,12 @@ int main(int argc, char * argv[])
                     rtn_name = s;
                     strcpy(loop_data->name, rtn_name);
 										// cout << loop_data->name << ' ';
+                }
+
+								if(cnt == 6){
+                    ADDRINT rtn_address = (long)strtol(s, NULL, 0);
+                    //cout << rtn_address;
+                    loop_data->rtn_addr = rtn_address;
                 }
 
                 s = strtok(NULL, ",");
