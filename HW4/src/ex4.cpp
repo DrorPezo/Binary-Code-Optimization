@@ -230,12 +230,10 @@ RTN_COUNT * new_rtn(RTN rtn)
  *****************************************************************************/
 VOID Routine(RTN rtn, VOID *v)
 {            
-
-
-      IMG img = IMG_FindByAddress(RTN_Address(rtn));
-      if(!IMG_Valid(img)) return;
-      if (!IMG_IsMainExecutable(img))
-		  return;
+		IMG img = IMG_FindByAddress(RTN_Address(rtn));
+		if(!IMG_Valid(img)) return;
+		if (!IMG_IsMainExecutable(img))
+		return;
 
 
     RTN_Open(rtn);

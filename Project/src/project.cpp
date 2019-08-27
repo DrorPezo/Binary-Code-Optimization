@@ -1028,7 +1028,7 @@ void unroll(RTN rtn, ADDRINT start_addr, ADDRINT end_addr, int cnt_seen){
 				}
 		}
 		INS end_ins;
-		// for(int i = 0; i < UNROLL_LVL; i++){
+		for(int i = 0; i < UNROLL_LVL; i++){
 				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 						// cerr << INS_Address(ins) << endl;
 						if(INS_Address(ins) < start_addr){
@@ -1073,7 +1073,7 @@ void unroll(RTN rtn, ADDRINT start_addr, ADDRINT end_addr, int cnt_seen){
 								break;
 						}
 				}
-		// }
+		}
 		//debug print of orig instruction:
 		if (KnobVerbose) {
 			cerr << "old instr: ";
@@ -1100,53 +1100,54 @@ void unroll(RTN rtn, ADDRINT start_addr, ADDRINT end_addr, int cnt_seen){
 			translated_rtn[translated_rtn_num].instr_map_entry = -1;
 		}
 		
-		// int rem = cnt_seen % UNROLL_LVL;
+		// adding the remainder
+		int rem = cnt_seen % UNROLL_LVL;
 
-		// for(int i = 0; i < rem; i++){
-		// 		for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
-		// 				// cerr << INS_Address(ins) << endl;
-		// 				if(INS_Address(ins) < start_addr){
-		// 						continue;
-		// 				}
-		// 				if(INS_Address(ins) < end_addr){
-		// 						//debug print of orig instruction:
-		// 						if (KnobVerbose) {
-		// 							cerr << "old instr: ";
-		// 							cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;		   			
-		// 						}				
+		for(int i = 0; i < rem; i++){
+				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
+						// cerr << INS_Address(ins) << endl;
+						if(INS_Address(ins) < start_addr){
+								continue;
+						}
+						if(INS_Address(ins) < end_addr){
+								//debug print of orig instruction:
+								if (KnobVerbose) {
+									cerr << "old instr: ";
+									cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;		   			
+								}				
 
-		// 						ADDRINT addr = INS_Address(ins);
+								ADDRINT addr = INS_Address(ins);
 											
-		// 						xed_decoded_inst_t xedd;
-		// 						xed_error_enum_t xed_code;							
+								xed_decoded_inst_t xedd;
+								xed_error_enum_t xed_code;							
 								
-		// 						xed_decoded_inst_zero_set_mode(&xedd,&dstate); 
+								xed_decoded_inst_zero_set_mode(&xedd,&dstate); 
 
-		// 						xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), max_inst_len);
-		// 						if (xed_code != XED_ERROR_NONE) {
-		// 							cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
-		// 							translated_rtn[translated_rtn_num].instr_map_entry = -1;
-		// 							break;
-		// 						}
+								xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), max_inst_len);
+								if (xed_code != XED_ERROR_NONE) {
+									cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
+									translated_rtn[translated_rtn_num].instr_map_entry = -1;
+									break;
+								}
 
-		// 						// Add instr into instr map:
-		// 						rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins));
-		// 						if (rc < 0) {
-		// 							cerr << "ERROR: failed during instructon translation." << endl;
-		// 							translated_rtn[translated_rtn_num].instr_map_entry = -1;
-		// 							break;
-		// 						}
-		// 				}
-		// 				else{
-		// 						// if(INS_Address(ins) == 0x40af0c){
-		// 						// 	char buf[2048];	
-		// 						// 	// xed_format_context(XED_SYNTAX_INTEL, &xedd, buf, 2048, INS_Address(ins), 0, 0);
-		// 						// 	cerr << "0x" << hex << INS_Address(ins) << " " << buf << endl;
-		// 						// }
-		// 						break;
-		// 				}
-		// 		}
-		// }
+								// Add instr into instr map:
+								rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins));
+								if (rc < 0) {
+									cerr << "ERROR: failed during instructon translation." << endl;
+									translated_rtn[translated_rtn_num].instr_map_entry = -1;
+									break;
+								}
+						}
+						else{
+								// if(INS_Address(ins) == 0x40af0c){
+								// 	char buf[2048];	
+								// 	// xed_format_context(XED_SYNTAX_INTEL, &xedd, buf, 2048, INS_Address(ins), 0, 0);
+								// 	cerr << "0x" << hex << INS_Address(ins) << " " << buf << endl;
+								// }
+								break;
+						}
+				}
+		}
 
 
 		for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
