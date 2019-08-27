@@ -967,7 +967,7 @@ bool rtn_is_hot(RTN rtn){
 /*****************************************/
 void find_loop_end_addr(){
 	for (std::vector<hot_loop_data_t*>::iterator it = hot_loops.begin() ; it != hot_loops.end(); ++it){
-		cout << (*it)->name << endl;
+		// cout << (*it)->name << endl;
 		RTN rtn = RTN_FindByAddress((*it)->rtn_addr);
 		RTN_Open(rtn);
 		for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)){
@@ -978,7 +978,7 @@ void find_loop_end_addr(){
 			}
 		}
 		RTN_Close(rtn);
-		cout << showbase << hex << (*it)->end_addr << endl;
+		// cout << showbase << hex << (*it)->end_addr << endl;
 	}
 }
 
@@ -986,8 +986,9 @@ void find_loop_end_addr(){
 /* unroll(RTN rtn, ADDRINT start_addr, ADDRINT end_addr) */
 /*****************************************/
 // Made generic for further project use
-void unroll(RTN rtn, ADDRINT start_addr, ADDRINT end_addr){
+void unroll(RTN rtn, ADDRINT start_addr, ADDRINT end_addr, int cnt_seen){
 		int rc;
+		cout << RTN_Name(rtn) << endl << endl;
 		for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 				if(INS_Address(ins) < start_addr){
 						//debug print of orig instruction:
@@ -1026,7 +1027,8 @@ void unroll(RTN rtn, ADDRINT start_addr, ADDRINT end_addr){
 						break;
 				}
 		}
-		for(int i = 0; i < UNROLL_LVL; i++){
+		INS end_ins;
+		// for(int i = 0; i < UNROLL_LVL; i++){
 				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 						// cerr << INS_Address(ins) << endl;
 						if(INS_Address(ins) < start_addr){
@@ -1067,73 +1069,85 @@ void unroll(RTN rtn, ADDRINT start_addr, ADDRINT end_addr){
 								// 	// xed_format_context(XED_SYNTAX_INTEL, &xedd, buf, 2048, INS_Address(ins), 0, 0);
 								// 	cerr << "0x" << hex << INS_Address(ins) << " " << buf << endl;
 								// }
+								end_ins = ins;
 								break;
 						}
 				}
-				// changing last loop's instruction 
-				// xed_encoder_instruction_t enc_instr;				
-				// xed_inst1(&enc_instr, dstate, 
-				// 					XED_ICLASS_JNL, 32,
-				// 					xed_relbr((xed_uint32_t)end_addr, 32)
-				// 					);
+		// }
+		//debug print of orig instruction:
+		if (KnobVerbose) {
+			cerr << "old instr: ";
+			cerr << "0x" << hex << INS_Address(end_ins) << ": " << INS_Disassemble(end_ins) <<  endl;		   			
+		}				
 
-				// xed_encoder_request_t enc_req;
-				// xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-				// if(!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
-				// 		cout << "failed encoder request" << endl;
-				// } 
+		ADDRINT addr = INS_Address(end_ins);
+					
+		xed_decoded_inst_t xedd;
+		xed_error_enum_t xed_code;							
+		
+		xed_decoded_inst_zero_set_mode(&xedd,&dstate); 
 
-				// xed_uint8_t enc_buf[XED_MAX_INSTRUCTION_BYTES] = {0};
-				// // unsigned int max_size = XED_MAX_INSTRUCTION_BYTES;
-				// // unsigned int new_size = 0;
-				// // xed_error_enum_t xed_error = xed_encode(&enc_req, enc_buf, max_size, &new_size);
-
-				// // if (xed_error != XED_ERROR_NONE) {
-				// // 	cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) <<  endl;
-				// // 	continue;
-				// // }	
-				// cerr << "print" << endl;
-				// xed_decoded_inst_t new_xedd;
-				// xed_decoded_inst_zero_set_mode(&new_xedd,&dstate);
-
-				// xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(enc_buf), XED_MAX_INSTRUCTION_BYTES);
-				// if (xed_code != XED_ERROR_NONE) {
-				// 		cerr << "ERROR: xed decode failed" << endl;
-				// 		continue;
-				// }
-				// rc = add_new_instr_entry(&new_xedd, 0, xed_decoded_inst_get_length (&new_xedd));
-				// if (rc < 0) {
-				// 	cerr << "ERROR: failed during instruction translation." << endl;
-				// 	translated_rtn[translated_rtn_num].instr_map_entry = -1;
-				// 	break;
-				// }	
-
-				// char buff[2048];	
-				// xed_format_context(XED_SYNTAX_INTEL, &new_xedd, buff, 2048, end_addr, 0, 0);
-				// cerr << "0x" << hex << end_addr << " " << buff << endl;
-		}
-		xed_uint8_t enc_buf[XED_MAX_INSTRUCTION_BYTES] = {0};
-		// unsigned int max_size = XED_MAX_INSTRUCTION_BYTES;
-		// unsigned int new_size = 0;
-		// xed_error_enum_t xed_error = xed_encode(&enc_req, enc_buf, max_size, &new_size);
-
-		// if (xed_error != XED_ERROR_NONE) {
-		// 	cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) <<  endl;
-		// 	continue;
-		// }	
-		cerr << "print" << endl;
-		xed_decoded_inst_t new_xedd;
-		xed_decoded_inst_zero_set_mode(&new_xedd,&dstate);
-
-		xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(enc_buf), XED_MAX_INSTRUCTION_BYTES);
+		xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), max_inst_len);
 		if (xed_code != XED_ERROR_NONE) {
-				cerr << "ERROR: xed decode failed" << endl;
+			cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
+			translated_rtn[translated_rtn_num].instr_map_entry = -1;
 		}
-		rc = add_new_instr_entry(&new_xedd, 0, xed_decoded_inst_get_length (&new_xedd));
+
+		// Add instr into instr map:
+		rc = add_new_instr_entry(&xedd, INS_Address(end_ins), INS_Size(end_ins));
 		if (rc < 0) {
-				cerr << "ERROR: failed during instruction translation." << endl;
-				translated_rtn[translated_rtn_num].instr_map_entry = -1;
-		}	
+			cerr << "ERROR: failed during instructon translation." << endl;
+			translated_rtn[translated_rtn_num].instr_map_entry = -1;
+		}
+		
+		// int rem = cnt_seen % UNROLL_LVL;
+
+		// for(int i = 0; i < rem; i++){
+		// 		for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
+		// 				// cerr << INS_Address(ins) << endl;
+		// 				if(INS_Address(ins) < start_addr){
+		// 						continue;
+		// 				}
+		// 				if(INS_Address(ins) < end_addr){
+		// 						//debug print of orig instruction:
+		// 						if (KnobVerbose) {
+		// 							cerr << "old instr: ";
+		// 							cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;		   			
+		// 						}				
+
+		// 						ADDRINT addr = INS_Address(ins);
+											
+		// 						xed_decoded_inst_t xedd;
+		// 						xed_error_enum_t xed_code;							
+								
+		// 						xed_decoded_inst_zero_set_mode(&xedd,&dstate); 
+
+		// 						xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), max_inst_len);
+		// 						if (xed_code != XED_ERROR_NONE) {
+		// 							cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
+		// 							translated_rtn[translated_rtn_num].instr_map_entry = -1;
+		// 							break;
+		// 						}
+
+		// 						// Add instr into instr map:
+		// 						rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins));
+		// 						if (rc < 0) {
+		// 							cerr << "ERROR: failed during instructon translation." << endl;
+		// 							translated_rtn[translated_rtn_num].instr_map_entry = -1;
+		// 							break;
+		// 						}
+		// 				}
+		// 				else{
+		// 						// if(INS_Address(ins) == 0x40af0c){
+		// 						// 	char buf[2048];	
+		// 						// 	// xed_format_context(XED_SYNTAX_INTEL, &xedd, buf, 2048, INS_Address(ins), 0, 0);
+		// 						// 	cerr << "0x" << hex << INS_Address(ins) << " " << buf << endl;
+		// 						// }
+		// 						break;
+		// 				}
+		// 		}
+		// }
+
 
 		for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 			if(INS_Address(ins) <= end_addr){
@@ -1180,8 +1194,9 @@ int find_candidate_rtns_for_translation(IMG img)
 	int rc;
 	// go over routines and check if they are candidates for translation and mark them for translation:
 	for (std::vector<hot_loop_data_t*>::iterator it = hot_loops.begin() ; it != hot_loops.end(); ++it){
-		// ADDRINT start_addr = (*it)->target_addr;
-		// ADDRINT ending_addr = (*it)->end_addr;
+		ADDRINT starting_addr = (*it)->target_addr;
+		ADDRINT ending_addr = (*it)->end_addr;
+		int cnt_seen = (*it)->cnt;
 		ADDRINT desired_rtn = (*it)->rtn_addr;
 		for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)){   
 			if (!SEC_IsExecutable(sec) || SEC_IsWriteable(sec) || !SEC_Address(sec)) continue;
@@ -1202,37 +1217,38 @@ int find_candidate_rtns_for_translation(IMG img)
 						// Open the RTN.
 						RTN_Open(rtn);         
 						if(RTN_Address(rtn) == desired_rtn){
-							// unroll(rtn, starting_addr, ending_addr);
-							for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
-									//debug print of orig instruction:
-									if (KnobVerbose) {
-										cerr << "old instr: ";
-										cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;
-										//xed_print_hex_line(reinterpret_cast<UINT8*>(INS_Address (ins)), INS_Size(ins));				   			
-									}				
+							unroll(rtn, starting_addr, ending_addr, cnt_seen);
+							//remove these lines after doing real unrolling
+							// for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
+							// 		//debug print of orig instruction:
+							// 		if (KnobVerbose) {
+							// 			cerr << "old instr: ";
+							// 			cerr << "0x" << hex << INS_Address(ins) << ": " << INS_Disassemble(ins) <<  endl;
+							// 			//xed_print_hex_line(reinterpret_cast<UINT8*>(INS_Address (ins)), INS_Size(ins));				   			
+							// 		}				
 
-									ADDRINT addr = INS_Address(ins);
+							// 		ADDRINT addr = INS_Address(ins);
 												
-									xed_decoded_inst_t xedd;
-									xed_error_enum_t xed_code;							
+							// 		xed_decoded_inst_t xedd;
+							// 		xed_error_enum_t xed_code;							
 									
-									xed_decoded_inst_zero_set_mode(&xedd,&dstate); 
+							// 		xed_decoded_inst_zero_set_mode(&xedd,&dstate); 
 
-									xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), max_inst_len);
-									if (xed_code != XED_ERROR_NONE) {
-										cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
-										translated_rtn[translated_rtn_num].instr_map_entry = -1;
-										break;
-									}
+							// 		xed_code = xed_decode(&xedd, reinterpret_cast<UINT8*>(addr), max_inst_len);
+							// 		if (xed_code != XED_ERROR_NONE) {
+							// 			cerr << "ERROR: xed decode failed for instr at: " << "0x" << hex << addr << endl;
+							// 			translated_rtn[translated_rtn_num].instr_map_entry = -1;
+							// 			break;
+							// 		}
 
-									// Add instr into instr map:
-									rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins));
-									if (rc < 0) {
-										cerr << "ERROR: failed during instructon translation." << endl;
-										translated_rtn[translated_rtn_num].instr_map_entry = -1;
-										break;
-									}
-							} 
+							// 		// Add instr into instr map:
+							// 		rc = add_new_instr_entry(&xedd, INS_Address(ins), INS_Size(ins));
+							// 		if (rc < 0) {
+							// 			cerr << "ERROR: failed during instructon translation." << endl;
+							// 			translated_rtn[translated_rtn_num].instr_map_entry = -1;
+							// 			break;
+							// 		}
+							// } 
 						}
 						else{
 							for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
