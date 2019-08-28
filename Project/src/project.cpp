@@ -1188,53 +1188,49 @@ void unroll(RTN rtn, ADDRINT start_addr, ADDRINT end_addr, int cnt_seen){
 									}
 							}
 							if (inst_iclass == XED_ICLASS_CMP){
-								cout << INS_Disassemble(ins) << endl;
+								// cout << INS_Disassemble(ins) << endl;
 								xed_int32_t x = -1;
-								if (get_immediate(xedd2, &x)){
+								if (get_immediate(xedd2, &x)){	
 									xed_reg_enum_t base_reg = XED_REG_INVALID;
 									xed_int64_t mem_disp = 0;
 									get_ins_mem(xedd2, &mem_disp, &base_reg);
 									// cout << xed_reg_enum_t2str(base_reg) << endl;
 									// cout << mem_disp << endl;
-									xed_uint32_t reg_width = xed_get_register_width_bits(base_reg); 	
-									if(x == 0){	
-										// change it to encode the right instruction
-										xed_encoder_instruction_t enc_instr;				
-										xed_inst2(&enc_instr, dstate, 
-																				XED_ICLASS_CMP, reg_width,
-																				xed_mem_bd(base_reg, xed_disp(mem_disp, reg_width), reg_width),
-																				xed_imm0(rem, reg_width)
-																				);
+									xed_encoder_instruction_t enc_instr;				
+									xed_inst2(&enc_instr, dstate, 
+																			XED_ICLASS_CMP, 32,
+																			xed_mem_bd(base_reg, xed_disp(mem_disp, 32), 32),
+																			xed_imm0(rem, 32)
+																			);
 
-										xed_encoder_request_t enc_req;
-										xed_encoder_request_zero_set_mode(&enc_req, &dstate);
-										if(!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
-												cout << "failed encoder request" << endl;
-										} 
+									xed_encoder_request_t enc_req;
+									xed_encoder_request_zero_set_mode(&enc_req, &dstate);
+									if(!xed_convert_to_encoder_request(&enc_req, &enc_instr)) {
+											cout << "failed encoder request" << endl;
+									} 
 
-										xed_uint8_t enc_buf[XED_MAX_INSTRUCTION_BYTES] = {0};
-										unsigned int max_size = XED_MAX_INSTRUCTION_BYTES;
-										unsigned int new_size = 0;
-										xed_error_enum_t xed_error = xed_encode(&enc_req, enc_buf, max_size, &new_size);
-										if (xed_error != XED_ERROR_NONE) {
-												cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) <<  endl;
-												continue;
-										}	
+									xed_uint8_t enc_buf[XED_MAX_INSTRUCTION_BYTES] = {0};
+									unsigned int max_size = XED_MAX_INSTRUCTION_BYTES;
+									unsigned int new_size = 0;
+									xed_error_enum_t xed_error = xed_encode(&enc_req, enc_buf, max_size, &new_size);
+									if (xed_error != XED_ERROR_NONE) {
+											cerr << "ENCODE ERROR: " << xed_error_enum_t2str(xed_error) <<  endl;
+											continue;
+									}	
 
-										xed_decoded_inst_t new_xedd;
-										xed_decoded_inst_zero_set_mode(&new_xedd,&dstate);
+									xed_decoded_inst_t new_xedd;
+									xed_decoded_inst_zero_set_mode(&new_xedd,&dstate);
 
-										xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(enc_buf), XED_MAX_INSTRUCTION_BYTES);
-										if (xed_code != XED_ERROR_NONE) {
-														cerr << "ERROR: xed decode failed" << endl;
-														continue;
-										}
-										rc = add_new_instr_entry(&new_xedd, 0, xed_decoded_inst_get_length (&new_xedd));
-										if (rc < 0) {
-												cerr << "ERROR: failed during instruction translation." << endl;
-												translated_rtn[translated_rtn_num].instr_map_entry = -1;
-												break;
-										}
+									xed_error_enum_t xed_code = xed_decode(&new_xedd, reinterpret_cast<UINT8*>(enc_buf), XED_MAX_INSTRUCTION_BYTES);
+									if (xed_code != XED_ERROR_NONE) {
+													cerr << "ERROR: xed decode failed" << endl;
+													continue;
+									}
+									rc = add_new_instr_entry(&new_xedd, 0, xed_decoded_inst_get_length (&new_xedd));
+									if (rc < 0) {
+											cerr << "ERROR: failed during instruction translation." << endl;
+											translated_rtn[translated_rtn_num].instr_map_entry = -1;
+											break;
 									}
 								}
 								else{
@@ -1250,7 +1246,7 @@ void unroll(RTN rtn, ADDRINT start_addr, ADDRINT end_addr, int cnt_seen){
 									xed_inst2(&enc_instr, dstate, 
 																			XED_ICLASS_CMP, reg_width,
 																			xed_reg(reg),
-																			xed_mem_bd(base_reg, xed_disp(mem_disp, reg_width), reg_width)
+																			xed_imm0(cnt_seen - rem, 32)
 																			);
 
 									xed_encoder_request_t enc_req;
