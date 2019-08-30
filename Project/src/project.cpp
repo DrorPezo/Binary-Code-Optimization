@@ -149,7 +149,7 @@ int max_rtn_count = 0;
 typedef struct { 
 	ADDRINT rtn_addr; 
 	USIZE rtn_size;
-	int instr_map_entry;   // negative instr_map_entry means routine does not have a translation.
+	long instr_map_entry;   // negative instr_map_entry means routine does not have a translation.
 	bool isSafeForReplacedProbe;	
 } translated_rtn_t;
 
@@ -1280,7 +1280,7 @@ void unroll(RTN rtn){
 	ADDRINT start_addr = curr_loop->target_addr;
 	ADDRINT end_addr = curr_loop->end_addr;
 	UINT64 cnt_seen = curr_loop->cnt;
-	UINT64 rem = cnt_seen % UNROLL_LVL;
+	UINT32 rem = cnt_seen % UNROLL_LVL;
 	for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
 		if(INS_Address(ins) < start_addr){
 			rc = encode_ins(ins);
@@ -1400,7 +1400,6 @@ int find_candidate_rtns_for_translation(IMG img)
 				}
 			} // end for RTN..
 		} // end for SEC...
-	cout << dec << num_of_instr_map_entries << endl;
 	return 0;
 }
 
@@ -1440,7 +1439,6 @@ inline void commit_translated_routines()
 		//replace function by new function in tc
 	
 		if (translated_rtn[i].instr_map_entry >= 0) {
-				    
 			if (translated_rtn[i].rtn_size > MAX_PROBE_JUMP_INSTR_BYTES && translated_rtn[i].isSafeForReplacedProbe) {						
 
 				RTN rtn = RTN_FindByAddress(translated_rtn[i].rtn_addr);
@@ -1460,7 +1458,8 @@ inline void commit_translated_routines()
 					
 					if (origFptr == NULL) {
 						cerr << "RTN_ReplaceProbed failed.";
-					} else {
+					} 
+					else {
 						cerr << "RTN_ReplaceProbed succeeded. ";
 					}
 					cerr << " orig routine addr: 0x" << hex << translated_rtn[i].rtn_addr
